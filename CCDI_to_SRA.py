@@ -638,8 +638,8 @@ def main():
     required_arg = parser.add_argument_group("required arguments")
     optional_arg = parser.add_argument_group("optional arguments")
     required_arg.add_argument(
-        "-m",
-        "--manifest",
+        "-f",
+        "--manifest_file",
         type=str,
         required=True,
         help="A validated dataset file  based on the template CCDI_submission_metadata_template (.xlsx)",
@@ -663,7 +663,7 @@ def main():
 
     args = parser.parse_args()
 
-    manifest = args.manifest
+    manifest = args.manifest_file
     template = args.template
 
     # Initiate a logger object for the script
