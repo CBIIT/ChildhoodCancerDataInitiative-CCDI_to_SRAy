@@ -16,6 +16,52 @@ ExcelFile = TypeVar("ExcelFile")
 Series = TypeVar("Series")
 
 
+class Color:
+    """A class for terminal color codes."""
+
+    BOLD = "\033[1m"
+    BLUE = "\033[94m"
+    WHITE = "\033[97m"
+    GREEN = "\033[92m"
+    YELLOW = "\033[93m"
+    RED = "\033[91m"
+    BOLD_WHITE = BOLD + WHITE
+    BOLD_BLUE = BOLD + BLUE
+    BOLD_GREEN = BOLD + GREEN
+    BOLD_YELLOW = BOLD + YELLOW
+    BOLD_RED = BOLD + RED
+    END = "\033[0m"
+
+
+class ColorLogFormatter(logging.Formatter):
+    """A class for formatting colored logs."""
+
+    FORMAT = "%(asctime)s - %(prefix)s%(levelname)s%(suffix)s - %(message)s"
+
+    LOG_LEVEL_COLOR = {
+        "DEBUG": {"prefix": "", "suffix": ""},
+        "INFO": {"prefix": Color.GREEN, "suffix": Color.END},
+        "WARNING": {"prefix": Color.YELLOW, "suffix": Color.END},
+        "ERROR": {"prefix": Color.RED, "suffix": Color.END},
+        "CRITICAL": {"prefix": Color.BOLD_RED, "suffix": Color.END},
+    }
+
+    def format(self, record):
+        """Format log records with a default prefix and suffix to terminal color codes that corresponds to the log level name."""
+        if not hasattr(record, "prefix"):
+            record.prefix = self.LOG_LEVEL_COLOR.get(record.levelname.upper()).get(
+                "prefix"
+            )
+
+        if not hasattr(record, "suffix"):
+            record.suffix = self.LOG_LEVEL_COLOR.get(record.levelname.upper()).get(
+                "suffix"
+            )
+
+        formatter = logging.Formatter(self.FORMAT, "%H:%M:%S")
+        return formatter.format(record)
+
+
 def get_date() -> str:
     """Returns the current date while the script is running"""
     date_obj = date.today()
@@ -34,20 +80,19 @@ def get_logger(loggername: str, log_level: str):
         "warning": logging.WARNING,  # 30
         "error": logging.ERROR,  # 40
     }
-    # logger_format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-    logger_format = "%(asctime)s - %(levelname)s - %(message)s"
+
     logger_filename = loggername + "_ccdi_to_sra_" + get_date() + ".log"
     logger = logging.getLogger(loggername)
     logger.setLevel(log_levels[log_level])
 
     # set the stream handler
     stream_handler = logging.StreamHandler(sys.stdout)
-    stream_handler.setFormatter(logging.Formatter(logger_format, "%Y-%m-%d %H:%M:%S"))
+    stream_handler.setFormatter(ColorLogFormatter())
     stream_handler.setLevel(log_levels["info"])
 
     # set the file handler
     file_handler = logging.FileHandler(logger_filename, mode="w")
-    file_handler.setFormatter(logging.Formatter(logger_format, "%Y-%m-%d %H:%M:%S"))
+    file_handler.setFormatter(ColorLogFormatter())
 
     logger.addHandler(stream_handler)
     logger.addHandler(file_handler)
@@ -74,6 +119,8 @@ def ccdi_manifest_to_dict(excel_file: ExcelFile) -> Dict:
     """Reads a validated CDDI manifest excel and retruns
     a dictionary with sheetnames as keys and pandas
     dataframes as values
+
+    The sheet will be dropped if found empty
     """
     sheets_to_avoid = ["README and INSTRUCTIONS", "Dictionary", "Terms and Value Sets"]
     ccdi_dict_raw = excel_sheets_to_dict(excel_file, no_names=sheets_to_avoid)
@@ -83,7 +130,8 @@ def ccdi_manifest_to_dict(excel_file: ExcelFile) -> Dict:
         item_df = item_df.drop(["type"], axis=1)
         # remove any line or column that has all na values
         item_df.dropna(axis=0, how="all", inplace=True)
-        item_df.dropna(axis=1, how="all", inplace=True)
+        # keep empty columnsat this step
+        # item_df.dropna(axis=1, how="all", inplace=True)
 
         # some more filtering criteria
         # test if the df is empty
@@ -98,6 +146,57 @@ def ccdi_manifest_to_dict(excel_file: ExcelFile) -> Dict:
             pass
     del ccdi_dict_raw
     return ccdi_dict
+
+
+def concat_seq_single_seq(seq_df: DataFrame, single_df: DataFrame) -> DataFrame:
+    """Returns a dataframe that combines sequencing_file
+    and single_cell_sequencing_file sheets
+    """
+    cols_to_keep = [
+        "sample.sample_id",
+        "pdx.pdx_id",
+        "cell_line.cell_line_id",
+        "library_id",
+        "library_strategy",
+        "library_source",
+        "library_selection",
+        "library_layout",
+        "platform",
+        "instrument_model",
+        "design_description",
+        "reference_genome_assembly",
+        "sequence_alignment_software",
+        "file_type",
+        "file_name",
+        "md5sum",
+        "number_of_bp",
+        "number_of_reads",
+        "coverage",
+        "avg_read_length",
+        "file_url_in_cds",
+    ]
+    seq_df_subset = seq_df[cols_to_keep]
+    single_df_subset = single_df[cols_to_keep]
+    combined_df = pd.concat(
+        [seq_df_subset, single_df_subset], axis=0, ignore_index=True
+    )
+    # create a sample id list that takes sample.sample_id value, if empty,
+    # takes pdx.pdx_id value, if empty, takes cell_line.cell_line_id value
+    sample_ID = []
+    sample_id_df = combined_df[
+        ["sample.sample_id", "pdx.pdx_id", "cell_line.cell_line_id"]
+    ]
+    for i in range(sample_id_df.shape[0]):
+        i_row = sample_id_df.loc[i, :]
+        if not pd.isna(i_row["sample.sample_id"]):
+            sample_ID.append(i_row["sample.sample_id"])
+        else:
+            if not pd.isna(i_row["pdx.pdx_id"]):
+                sample_ID.append(i_row["pdx.pdx_id"])
+            else:
+                sample_ID.append(i_row["cell_line.cell_line_id"])
+    combined_df["sample_ID"] = sample_ID
+    return combined_df
 
 
 def excel_sheets_to_dict(excel_file: ExcelFile, no_names: List) -> Dict:
@@ -161,7 +260,7 @@ def sra_match_manifest_seq(
     with information of "sequencing data" sheet of CCDI manifest
     """
     sra_seq_df["phs_accession"] = manifest_seq_df["acl"]
-    sra_seq_df["sample_ID"] = manifest_seq_df["sample.sample_id"]
+    sra_seq_df["sample_ID"] = manifest_seq_df["sample_ID"]
     sra_seq_df["library_ID"] = manifest_seq_df["library_id"]
     sra_seq_df["title/short description"] = manifest_seq_df["study_name"]
     sra_seq_df["library_strategy (click for details)"] = manifest_seq_df[
@@ -395,18 +494,23 @@ def sra_value_verification(
     using SRA template terms
 
     Fields for verification: [
+    sample_ID, library_ID,
     library strategy, library source,
     library selection, library layout,
     platform, platform model, filetype
+    filename
     ]
 
     It reports any column names with missing data, and
     any unknown values found in these fields according
-    to SRA template terms.
+    to SRA template terms. Any row containing unknown
+    values will be removed before return result
     """
     logger.info("Begin verification against SRA template terms")
     # check missing information
     required_fields = [
+        "sample_ID",
+        "library_ID",
         "library_strategy (click for details)",
         "library_source (click for details)",
         "library_selection (click for details)",
@@ -414,6 +518,7 @@ def sra_value_verification(
         "platform (click for details)",
         "instrument_model",
         "filetype",
+        "filename",
     ]
     required_df = sra_df[required_fields]
     cols_missing_info = required_df.columns[required_df.isna().any()].tolist()
@@ -554,6 +659,12 @@ def sra_value_verification(
         logger.info(f"All rows were kept because no unknown values were found")
 
     sra_df = sra_df.drop(index=unknown_index_list_uniq).reset_index(drop=True)
+    # drop any row that has empty value for filename
+    number_missing_filename = sum(pd.isna(sra_df["filename"]))
+    logger.info(
+        f"{number_missing_filename} rows were removed due to missing filename value"
+    )
+    sra_df = sra_df[pd.notna(sra_df["filename"])].reset_index(drop=True)
 
     return sra_df
 
@@ -589,22 +700,61 @@ def spread_sra_df(sra_df: DataFrame) -> DataFrame:
     return return_df
 
 
-def duplicated_library_ID(sra_df: DataFrame, logger) -> None:
-    """Report if any library IDs were found in multiple lines
+def check_and_remove_duplicates(sra_df: DataFrame, logger) -> None:
+    """Report if any filenames were found in multiple lines
     after combining sra df and previsous sra submission df
+
+    If one row shares same library_ID and filename,
+    then it is considered same sequencing record
     """
-    library_id_size = (
-        sra_df.groupby(["library_ID"])
+    filename_size = (
+        sra_df.groupby(["library_ID", "filename"])
         .size()
         .reset_index(name="counts")
         .sort_values("counts", ascending=False)
     )
-    duplicated_ids = library_id_size[library_id_size["counts"] > 1][
-        "library_ID"
+    duplicated_filename = filename_size[filename_size["counts"] > 1][
+        "filename"
     ].tolist()
-    logger.error(
-        f"These lirbary IDs have been submitted in previous submission and please fix before submission: {*duplicated_ids,}"
+    logger.warning(
+        f"These filenames have been submitted in previous submission and will be removed: {*duplicated_filename,}"
     )
+    # remove duplicates and keep the last record
+    # due to the way of concatenation, we keep the last record of
+    # duplicate lines
+    sra_df = sra_df.drop_duplicates(subset=["library_ID", "filename"], keep="last")
+    return sra_df
+
+
+def reorder_col_names(col_list: List) -> List:
+    extended_file = [i for i in col_list if "." in i]
+    before_file_cols = [
+        "phs_accession",
+        "sample_ID",
+        "library_ID",
+        "title/short description",
+        "library_strategy (click for details)",
+        "library_source (click for details)",
+        "library_selection (click for details)",
+        "library_layout",
+        "platform (click for details)",
+        "instrument_model",
+        "design_description",
+        "reference_genome_assembly (or accession)",
+        "alignment_software",
+        "filetype",
+        "filename",
+        "MD5_checksum",
+    ]
+    after_file_cols = [
+        "active_location_URL",
+        "Bases",
+        "Reads",
+        "coverage",
+        "AvgReadLength",
+    ]
+    reordered_cols = before_file_cols + extended_file + after_file_cols
+    return reordered_cols
 
 
 def rename_colnames_output(sra_df: DataFrame) -> DataFrame:
@@ -625,8 +775,46 @@ def rename_colnames_output(sra_df: DataFrame) -> DataFrame:
         elif "MD" in i:
             i_tofix = "MD5_checksum"
         col_rename[i] = i_tofix
+    reordered_colnames = reorder_col_names(col_names)
+    sra_df = sra_df[reordered_colnames]
     sra_df = sra_df.rename(columns=col_rename)
     return sra_df
+
+
+def reformat_previous_sra(p_sra_df: DataFrame) -> DataFrame:
+    sra_cols = p_sra_df.columns.tolist()
+    additional_cols = [i for i in sra_cols if "." in i]
+    extra_max = max([int(i[len(i) - 1]) for i in additional_cols])
+    p_sra_df_nochange = p_sra_df[[i for i in sra_cols if i not in additional_cols]]
+    nofile_cols = [
+        i
+        for i in p_sra_df_nochange.columns
+        if i not in ["filetype", "filename", "MD5_checksum"]
+    ]
+
+    for i in range(1, extra_max + 1):
+        i_filetype_col = "filetype." + str(i)
+        i_filename_col = "filename." + str(i)
+        i_md5_col = "MD5_checksum." + str(i)
+        i_cols = [i_filetype_col, i_filename_col, i_md5_col]
+        i_file_df = p_sra_df[pd.notna(p_sra_df[i_filetype_col])][i_cols]
+        i_nofile_df = p_sra_df[pd.notna(p_sra_df[i_filetype_col])][nofile_cols]
+        if i_file_df.empty:
+            pass
+        else:
+            i_concat = pd.concat([i_nofile_df, i_file_df], axis=1)
+            i_concat = i_concat.rename(
+                columns={
+                    i_filetype_col: "filetype",
+                    i_filename_col: "filename",
+                    i_md5_col: "MD5_checksum",
+                }
+            )
+            p_sra_df_nochange = pd.concat(
+                [p_sra_df_nochange, i_concat], axis=0, ignore_index=True
+            ).reset_index(drop=True)
+
+    return p_sra_df_nochange
 
 
 def main():
@@ -638,7 +826,7 @@ def main():
     required_arg = parser.add_argument_group("required arguments")
     optional_arg = parser.add_argument_group("optional arguments")
     required_arg.add_argument(
-        "-m",
+        "-f",
         "--manifest",
         type=str,
         required=True,
@@ -718,19 +906,31 @@ def main():
     else:
         logger.warning("No previsous submission file was provided.")
 
-    # If there is no seuqencing file record in CCDI manifest, exit execution
-    if not "sequencing_file" in workbook_dict.keys():
+    # If there is no seuqencing record in CCDI manifest, exit execution
+    if not (
+        "sequencing_file" in workbook_dict.keys()
+        or "single_cell_sequencing_file" in workbook_dict.keys()
+    ):
         logger.info(
-            "No seuqneincg files found in CCDI submission file, and no SRA submission file will be generated"
+            "No seuqneincg file or single cell sequencing file found in CCDI submission file, and no SRA submission file will be generated"
         )
         sys.exit()
     else:
         # create a sequencing df if "sequencing_file" exists in workbook_dict
-        sequencing_df = workbook_dict["sequencing_file"]
+        sequencing_file_df = workbook_dict["sequencing_file"]
+        single_sequencing_file_df = workbook_dict["single_cell_sequencing_file"]
         logger.info(f"Sequecing file records found in validated CCDI manifest")
 
     # create a dictionary of contents sra_dict["Terms"]
     sra_terms_dict = get_sra_terms_dict(sra_dict["Terms"])
+
+    # Combine records from sheets sequencing_file and single_cell_sequencing_file
+    sequencing_df = concat_seq_single_seq(
+        seq_df=sequencing_file_df, single_df=single_sequencing_file_df
+    )
+    logger.info(
+        f"A total of {sequencing_df.shape[0]} sequencing files were found in the provided manifest"
+    )
 
     # extract study acl and name
     sequencing_df["acl"] = get_acl(workbook_dict)
@@ -739,23 +939,20 @@ def main():
 
     # create data frame with the columns of the SRA template
     sra_df = pd.DataFrame(columns=sra_dict["Sequence_Data"].columns.tolist())
-    logger.info("Creating Dataframe using SRA Sequence Data sheet as template")
+    logger.info("Created a Dataframe using SRA Sequence Data sheet as template")
     # drop redundant columns when the used template has more than two filetype, filename, or MD5_checksum
     sra_df = remove_redundant_cols(df=sra_df)
     # fill the cols in sra_df using sequencing df
     sra_df = sra_match_manifest_seq(sra_seq_df=sra_df, manifest_seq_df=sequencing_df)
     logger.info(
-        "Fill the sequence data dataframe with info from CCDI manifest sequencing_file sheet"
+        "Filled the sequence data dataframe with info from CCDI manifest sequencing_file sheet"
     )
-
-    # remove a row if the the filename of that row is empty
-    sra_df = sra_df[pd.notna(sra_df["filename"])]
 
     # special fixes (before verifiation)
     sra_df = reformat_sra_values(sra_df)
-    logger.info("Reformat the value in the Seuquence Data Dataframe Done.")
+    logger.info("Reformated the value in the Seuquence Data Dataframe Done.")
 
-    # verification against template
+    # verification against template and check if some required fields are empty
     sra_df = sra_value_verification(
         sra_df=sra_df, sra_terms_dict=sra_terms_dict, logger=logger
     )
@@ -770,23 +967,53 @@ def main():
     else:
         pass
 
-    # data frame manipulation, spread sra_df if multiple sequencing files are
-    # sharing same library_ID
-    sra_df = spread_sra_df(sra_df=sra_df)
-
-    # if previous sra submission provided, concatenated
+    # if previous submission file found and not empty
+    # reformat it so the filetype.1, filename.1 and MD5_checksum.1
+    # will be empty and reformatted into the newline
     if args.previous_submission:
         pre_sub_df = sra_template_to_dict(pre_sub_f)
         pre_sub_df_seq = pre_sub_df["Sequence_Data"]
         if not pre_sub_df_seq.empty:
-            sra_df = pd.concat([pre_sub_df_seq, sra_df], axis=0, ignore_index=True)
-            # check if multiple lines sharing the same library_ID
-            if sra_df.groupby(["library_ID"]).size().max() > 1:
-                duplicated_library_ID(sra_df=sra_df, logger=logger)
+            pre_sub_reformatted = reformat_previous_sra(p_sra_df=pre_sub_df_seq)
+            logger.info(
+                f"Found {pre_sub_reformatted.shape[0]} records of sequencing files in the previous submission"
+            )
+            # combine previous submission with current submisison
+            sra_df = pd.concat([pre_sub_reformatted, sra_df], axis=0, ignore_index=True)
+            # check and remove duplicates
+            if sra_df.groupby(["library_ID", "filename"]).size().max() > 1:
+                # if multiple lines are sharing same library_ID and same filename
+                # they are considered as same record
+                sra_df = check_and_remove_duplicates(sra_df=sra_df, logger=logger)
             else:
                 pass
         else:
             pass
+    else:
+        pass
+
+    # data frame manipulation, spread sra_df if multiple sequencing files are
+    # sharing same library_ID. This function won't result multiple row sharing
+    # same libary_ID
+    sra_df = spread_sra_df(sra_df=sra_df)
+    logger.info(
+        "Sequencing files sharing the same library_ID were reorganized into single row"
+    )
+
+    # check sample_ID and library_ID is one to many relationship
+    # Many library_ID can be derived from same sample_ID
+    if sra_df[["sample_ID", "library_ID"]].groupby("library_ID").size().max() > 1:
+        logger.error(f"Multiple sample_ID were found associated with same library_ID")
+        groupby_library_count = (
+            sra_df[["sample_ID", "library_ID"]].groupby("library_ID").count()
+        )
+        library_to_fix = groupby_library_count[
+            groupby_library_count["sample_ID"] > 1
+        ].index.tolist()
+        logger.error(
+            f"These library_IDs were found associated with multiple sample_IDs: {*library_to_fix,}"
+        )
+        sys.exit()
     else:
         pass
 
