@@ -763,7 +763,12 @@ def rename_colnames_output(sra_df: DataFrame) -> DataFrame:
     "fileanme.#" -> "filename"
     "filetype.#" -> "filetype"
     "MD5_checksum.#" -> "MD5.checksum"
+
+    Reorder the columns of the dataframe
+
+    Change the datatype of of ["Bases","Reads","coverage","AvgReadLength"] to numeric
     """
+    cols_to_change_type = ["Bases","Reads","coverage","AvgReadLength"]
     col_names = sra_df.columns.tolist()
     col_to_fix = [i for i in col_names if "." in i]
     col_rename = {}
@@ -778,6 +783,8 @@ def rename_colnames_output(sra_df: DataFrame) -> DataFrame:
     reordered_colnames = reorder_col_names(col_names)
     sra_df = sra_df[reordered_colnames]
     sra_df = sra_df.rename(columns=col_rename)
+    # Change the few cols into numeric datatype
+    sra_df[cols_to_change_type] = sra_df[cols_to_change_type].apply(pd.to_numeric, errors='coerce')
     return sra_df
 
 
@@ -950,7 +957,7 @@ def main():
 
     # special fixes (before verifiation)
     sra_df = reformat_sra_values(sra_df)
-    logger.info("Reformated the value in the Seuquence Data Dataframe Done.")
+    logger.info("Reformatting the value in the Seuquence Data Dataframe Done.")
 
     # verification against template and check if some required fields are empty
     sra_df = sra_value_verification(
@@ -997,7 +1004,7 @@ def main():
     # same libary_ID
     sra_df = spread_sra_df(sra_df=sra_df)
     logger.info(
-        "Sequencing files sharing the same library_ID were reorganized into single row"
+        "Sequencing files sharing the same library_ID will be reorganized into single row"
     )
 
     # check sample_ID and library_ID is one to many relationship
