@@ -574,7 +574,11 @@ def sra_value_verification(
             "Additional info:\n"
             + sra_df.iloc[unknown_library_strategy_index][
                 ["sample_ID", "library_ID", "library_strategy (click for details)"]
-            ].to_markdown(tablefmt="fancy_grid", index=False)
+            ].to_markdown(
+                tablefmt="fancy_grid",
+                index=False,
+                headers=["sample_ID", "library_ID", "library_strategy"],
+            )
         )
     else:
         logger.info("Library strategy verification PASSED")
@@ -595,7 +599,15 @@ def sra_value_verification(
             "Additional info:\n"
             + sra_df.iloc[unknown_library_source_index][
                 ["sample_ID", "library_ID", "library_source (click for details)"]
-            ].to_markdown(tablefmt="fancy_grid", index=False)
+            ].to_markdown(
+                tablefmt="fancy_grid",
+                index=False,
+                headers=[
+                    "sample_ID",
+                    "library_ID",
+                    "library_source",
+                ],
+            )
         )
     else:
         logger.info("Library source verification PASSED")
@@ -616,7 +628,15 @@ def sra_value_verification(
             "Additional info:\n"
             + sra_df.iloc[unknown_library_selection_index][
                 ["sample_ID", "library_ID", "library_selection (click for details)"]
-            ].to_markdown(tablefmt="fancy_grid", index=False)
+            ].to_markdown(
+                tablefmt="fancy_grid",
+                index=False,
+                headers=[
+                    "sample_ID",
+                    "library_ID",
+                    "library_selection",
+                ],
+            )
         )
     else:
         logger.info("Library selection verification PASSED")
@@ -693,7 +713,11 @@ def sra_value_verification(
             "Additional info:\n"
             + sra_df.iloc[unknown_platform_index][
                 ["sample_ID", "library_ID", "platform (click for details)"]
-            ].to_markdown(tablefmt="fancy_grid", index=False)
+            ].to_markdown(
+                tablefmt="fancy_grid",
+                index=False,
+                headers=["sample_ID", "library_ID", "platform"],
+            )
         )
     else:
         logger.info("Platform verification PASSED")
@@ -704,8 +728,17 @@ def sra_value_verification(
         logger.warning(
             "Additional info:\n"
             + sra_df.iloc[unknown_model_index][
-                ["sample_ID", "library_ID", "instrument_model"]
-            ].to_markdown(tablefmt="fancy_grid", index=False)
+                [
+                    "sample_ID",
+                    "library_ID",
+                    "platform (click for details)",
+                    "instrument_model",
+                ]
+            ].to_markdown(
+                tablefmt="fancy_grid",
+                index=False,
+                headers=["sample_ID", "library_ID", "platform", "model"],
+            )
         )
     else:
         logger.info("Model verification PASSED")
