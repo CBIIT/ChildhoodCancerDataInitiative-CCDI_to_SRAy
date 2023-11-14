@@ -91,8 +91,9 @@ def get_logger(loggername: str, log_level: str):
     stream_handler.setLevel(log_levels["info"])
 
     # set the file handler
+    file_FORMAT = "%(asctime)s - %(levelname)s - %(message)s"
     file_handler = logging.FileHandler(logger_filename, mode="w")
-    file_handler.setFormatter(ColorLogFormatter())
+    file_handler.setFormatter(logging.Formatter(file_FORMAT, "%H:%M:%S"))
 
     logger.addHandler(stream_handler)
     logger.addHandler(file_handler)
@@ -470,6 +471,7 @@ def reformat_sra_values(sra_df: DataFrame) -> DataFrame:
     # fix filetype value and convert all values to lower case
     sra_df["filetype"][sra_df["filetype"].str.contains("tbi", na=False)] = "vcf_index"
     sra_df["filetype"][sra_df["filetype"] == "cram_index"] = "crai"
+    sra_df["filetype"][sra_df["filetype"] == "bam_index"] = "bai"
 
     # fix design_description, extend description to 250 char long
     sra_df["design_description"] = fix_design_description(
@@ -485,6 +487,21 @@ def find_new_value_in_col(target_col: Series, ref_col: Series) -> List:
     bool_series = target_col.dropna().isin(ref_col.dropna())
     index_false = bool_series.index[~bool_series].to_list()
     return index_false
+
+
+def get_unknown_model_index(sra_df: DataFrame, unknown_model: List) -> List:
+    index_to_remove = []
+    for i in unknown_model:
+        i_platform = i["platform"]
+        i_model = i["model"]
+        for j in sra_df.index:
+            j_platform = sra_df.iloc[j]["platform (click for details)"]
+            j_model = sra_df.iloc[j]["instrument_model"]
+            if j_platform == i_platform and j_model == i_model:
+                index_to_remove.append(j)
+            else:
+                pass
+    return index_to_remove
 
 
 def sra_value_verification(
@@ -523,9 +540,20 @@ def sra_value_verification(
     required_df = sra_df[required_fields]
     cols_missing_info = required_df.columns[required_df.isna().any()].tolist()
     if len(cols_missing_info) > 0:
-        logger.warning(
-            f"These required fields contain missing info: {*cols_missing_info,}"
+        logger.error(
+            f"These required fields contain missing value: {*cols_missing_info,}"
         )
+        df_w_missing = required_df[required_df.isna().any(axis=1)]
+        logger.warning(
+            f"{df_w_missing.shape[0]} rows were removed due to missing value mentioned above"
+        )
+        logger.warning(
+            "Additional info: sample_ID and library_ID of removed rows\n"
+            + df_w_missing[["sample_ID", "library_ID"]].to_markdown(
+                tablefmt="fancy_grid", index=False
+            )
+        )
+        sra_df = sra_df[required_df.notna().all(axis=1)].reset_index(drop=True)
     else:
         logger.info(f"All required fields are populated.")
 
@@ -539,8 +567,14 @@ def sra_value_verification(
         unknown_library_strategy_index
     ].tolist()
     if len(unknown_library_strategy) > 0:
-        logger.warning(
+        logger.error(
             f"The following library strategy values are not accepted: {*unknown_library_strategy,}"
+        )
+        logger.warning(
+            "Additional info:\n"
+            + sra_df.iloc[unknown_library_strategy_index][
+                ["sample_ID", "library_ID", "library_strategy (click for details)"]
+            ].to_markdown(tablefmt="fancy_grid", index=False)
         )
     else:
         logger.info("Library strategy verification PASSED")
@@ -554,8 +588,14 @@ def sra_value_verification(
         unknown_library_source_index
     ].tolist()
     if len(unknown_library_source) > 0:
-        logger.warning(
+        logger.error(
             f"The following library source values are not accepted: {*unknown_library_source,}"
+        )
+        logger.warning(
+            "Additional info:\n"
+            + sra_df.iloc[unknown_library_source_index][
+                ["sample_ID", "library_ID", "library_source (click for details)"]
+            ].to_markdown(tablefmt="fancy_grid", index=False)
         )
     else:
         logger.info("Library source verification PASSED")
@@ -569,22 +609,34 @@ def sra_value_verification(
         unknown_library_selection_index
     ].tolist()
     if len(unknown_library_selection) > 0:
-        logger.warning(
+        logger.error(
             f"The following library selection values are not accepted: {*unknown_library_selection,}"
+        )
+        logger.warning(
+            "Additional info:\n"
+            + sra_df.iloc[unknown_library_selection_index][
+                ["sample_ID", "library_ID", "library_selection (click for details)"]
+            ].to_markdown(tablefmt="fancy_grid", index=False)
         )
     else:
         logger.info("Library selection verification PASSED")
 
     # check library layout
-    unkown_library_layout_index = find_new_value_in_col(
+    unknown_library_layout_index = find_new_value_in_col(
         sra_df["library_layout"], sra_terms_dict["layout"]["Layout"]
     )
     unknown_library_layout = sra_df["library_layout"][
-        unkown_library_layout_index
+        unknown_library_layout_index
     ].tolist()
     if len(unknown_library_layout) > 0:
-        logger.warning(
+        logger.error(
             f"The following library layout values are not accepted: {*unknown_library_layout,}"
+        )
+        logger.warning(
+            "Additional info:\n"
+            + sra_df.iloc[unknown_library_layout_index][
+                ["sample_ID", "library_ID", "library_layout"]
+            ].to_markdown(tablefmt="fancy_grid", index=False)
         )
     else:
         logger.info("Library layout verification PASSED")
@@ -595,8 +647,14 @@ def sra_value_verification(
     )
     unknown_file_type = sra_df["filetype"][unknown_file_type_index].tolist()
     if len(unknown_file_type) > 0:
-        logger.warning(
+        logger.error(
             f"The following file type values are not accepted: {*unknown_file_type,}"
+        )
+        logger.warning(
+            "Additional info:\n"
+            + sra_df.iloc[unknown_file_type_index][
+                ["sample_ID", "library_ID", "filetype"]
+            ].to_markdown(tablefmt="fancy_grid", index=False)
         )
     else:
         logger.info("File type verification PASSED")
@@ -610,61 +668,67 @@ def sra_value_verification(
     ].dropna(
         subset=["platform (click for details)"]
     )  # remove anyline with empty platform
-    platform_model_dict = dict(
-        zip(
-            platform_model_df["platform (click for details)"],
-            platform_model_df["instrument_model"],
-        )
-    )
-    for i in platform_model_dict.keys():
-        if i in sra_terms_dict["platform"]["platforms"].to_list():
-            model_i = platform_model_dict[i]
-            if model_i not in sra_terms_dict["model"][i].dropna().to_list():
-                unknown_model.append(model_i)
+    for i in platform_model_df.index:
+        i_platform = platform_model_df.iloc[i]["platform (click for details)"]
+        i_model = platform_model_df.iloc[i]["instrument_model"]
+        i_platform_model_dict = {"platform": i_platform, "model": i_model}
+        if i_platform in sra_terms_dict["platform"]["platforms"].to_list():
+            if i_model not in sra_terms_dict["model"][i_platform].dropna().to_list():
+                unknown_model.append(i_platform_model_dict)
             else:
                 pass
         else:
-            unknown_platform.append(i)
+            unknown_platform.append(i_platform)
+
+    unknown_platform_index = find_new_value_in_col(
+        sra_df["platform (click for details)"], sra_terms_dict["platform"]["platforms"]
+    )
+    unknown_model_index = get_unknown_model_index(sra_df, unknown_model=unknown_model)
+
     if len(unknown_platform) > 0:
-        logger.warning(
+        logger.error(
             f"The following platform values are not accepted: {*unknown_platform,}"
+        )
+        logger.warning(
+            "Additional info:\n"
+            + sra_df.iloc[unknown_platform_index][
+                ["sample_ID", "library_ID", "platform (click for details)"]
+            ].to_markdown(tablefmt="fancy_grid", index=False)
         )
     else:
         logger.info("Platform verification PASSED")
     if len(unknown_model) > 0:
-        logger.warning(
+        logger.error(
             f"The following model values are not accepted given the platform value: {*unknown_model,}"
+        )
+        logger.warning(
+            "Additional info:\n"
+            + sra_df.iloc[unknown_model_index][
+                ["sample_ID", "library_ID", "instrument_model"]
+            ].to_markdown(tablefmt="fancy_grid", index=False)
         )
     else:
         logger.info("Model verification PASSED")
-    unknown_platform_index = find_new_value_in_col(
-        sra_df["platform (click for details)"], sra_terms_dict["platform"]["platforms"]
-    )
 
-    # a list of index of any row that contains an unknow value
+    # Create a list of index of any row that contains an unknow value
     unknown_index_list = (
         unknown_library_strategy_index
         + unknown_library_source_index
         + unknown_library_selection_index
-        + unkown_library_layout_index
+        + unknown_library_layout_index
         + unknown_platform_index
         + unknown_file_type_index
+        + unknown_model_index
     )
     unknown_index_list_uniq = list(set(unknown_index_list))
     if len(unknown_index_list_uniq) > 0:
         logger.warning(
-            f"{len(unknown_index_list_uniq)} rows were removed due to unknown values found"
+            f"{len(unknown_index_list_uniq)} rows were removed due to unknown values found above"
         )
     else:
-        logger.info(f"All rows were kept because no unknown values were found")
+        pass
 
     sra_df = sra_df.drop(index=unknown_index_list_uniq).reset_index(drop=True)
-    # drop any row that has empty value for filename
-    number_missing_filename = sum(pd.isna(sra_df["filename"]))
-    logger.info(
-        f"{number_missing_filename} rows were removed due to missing filename value"
-    )
-    sra_df = sra_df[pd.notna(sra_df["filename"])].reset_index(drop=True)
 
     return sra_df
 
@@ -721,8 +785,10 @@ def check_and_remove_duplicates(sra_df: DataFrame, logger) -> None:
     )
     # remove duplicates and keep the last record
     # due to the way of concatenation, we keep the last record of
-    # duplicate lines
-    sra_df = sra_df.drop_duplicates(subset=["library_ID", "filename"], keep="last")
+    # duplicate lines, which should be the record in ccdi manifest
+    sra_df = sra_df.drop_duplicates(
+        subset=["library_ID", "filename"], keep="last"
+    ).reset_index(drop=True)
     return sra_df
 
 
@@ -768,7 +834,7 @@ def rename_colnames_output(sra_df: DataFrame) -> DataFrame:
 
     Change the datatype of of ["Bases","Reads","coverage","AvgReadLength"] to numeric
     """
-    cols_to_change_type = ["Bases","Reads","coverage","AvgReadLength"]
+    cols_to_change_type = ["Bases", "Reads", "coverage", "AvgReadLength"]
     col_names = sra_df.columns.tolist()
     col_to_fix = [i for i in col_names if "." in i]
     col_rename = {}
@@ -784,7 +850,9 @@ def rename_colnames_output(sra_df: DataFrame) -> DataFrame:
     sra_df = sra_df[reordered_colnames]
     sra_df = sra_df.rename(columns=col_rename)
     # Change the few cols into numeric datatype
-    sra_df[cols_to_change_type] = sra_df[cols_to_change_type].apply(pd.to_numeric, errors='coerce')
+    sra_df[cols_to_change_type] = sra_df[cols_to_change_type].apply(
+        pd.to_numeric, errors="coerce"
+    )
     return sra_df
 
 
@@ -946,20 +1014,51 @@ def main():
 
     # create data frame with the columns of the SRA template
     sra_df = pd.DataFrame(columns=sra_dict["Sequence_Data"].columns.tolist())
-    logger.info("Created a Dataframe using SRA Sequence Data sheet as template")
+    logger.info(
+        "Created a Dataframe using SRA Sequence Data sheet as template and CCDI manifest as the source of information"
+    )
     # drop redundant columns when the used template has more than two filetype, filename, or MD5_checksum
     sra_df = remove_redundant_cols(df=sra_df)
     # fill the cols in sra_df using sequencing df
     sra_df = sra_match_manifest_seq(sra_seq_df=sra_df, manifest_seq_df=sequencing_df)
-    logger.info(
-        "Filled the sequence data dataframe with info from CCDI manifest sequencing_file sheet"
-    )
 
     # special fixes (before verifiation)
     sra_df = reformat_sra_values(sra_df)
     logger.info("Reformatting the value in the Seuquence Data Dataframe Done.")
 
-    # verification against template and check if some required fields are empty
+    # check sample_ID and library_ID is one to many relationship
+    # Many library_ID can be derived from same sample_ID
+
+    logger.info(
+        "Checking if any library_ID was found associated with multiple sample_IDs"
+    )
+    sample_library_size = (
+        sra_df.groupby(["library_ID", "sample_ID"]).size().groupby("library_ID").size()
+    )
+    if sample_library_size.max() > 1:
+        library_to_fix = sample_library_size[sample_library_size > 1].index.tolist()
+        logger.error(
+            f"Multiple sample_IDs were found associated with same library_ID:\n{*library_to_fix,}"
+        )
+        rows_to_remove = sum(sra_df["library_ID"].isin(library_to_fix))
+        logger.warning(
+            f"{rows_to_remove} rows were removed due to the sample_ID and library_ID issue"
+        )
+        df_rows_to_remove = sra_df[["sample_ID", "library_ID"]][
+            sra_df["library_ID"].isin(library_to_fix)
+        ]
+        logger.warning(
+            "Additional info: sample_ID and library_ID of removed rows\n"
+            + df_rows_to_remove.to_markdown(tablefmt="fancy_grid", index=False)
+        )
+        # remove the row containing the library_ID mentioned above
+        sra_df = sra_df[~sra_df["library_ID"].isin(library_to_fix)].reset_index(
+            drop=True
+        )
+    else:
+        logger.info("sample_ID and library_ID checking PASSED ")
+
+    # verification against template and check if any required fields are empty
     sra_df = sra_value_verification(
         sra_df=sra_df, sra_terms_dict=sra_terms_dict, logger=logger
     )
@@ -1006,23 +1105,6 @@ def main():
     logger.info(
         "Sequencing files sharing the same library_ID will be reorganized into single row"
     )
-
-    # check sample_ID and library_ID is one to many relationship
-    # Many library_ID can be derived from same sample_ID
-    if sra_df[["sample_ID", "library_ID"]].groupby("library_ID").size().max() > 1:
-        logger.error(f"Multiple sample_ID were found associated with same library_ID")
-        groupby_library_count = (
-            sra_df[["sample_ID", "library_ID"]].groupby("library_ID").count()
-        )
-        library_to_fix = groupby_library_count[
-            groupby_library_count["sample_ID"] > 1
-        ].index.tolist()
-        logger.error(
-            f"These library_IDs were found associated with multiple sample_IDs: {*library_to_fix,}"
-        )
-        sys.exit()
-    else:
-        pass
 
     # rename any colnames, e.g. filetype.1 -> filetype
     sra_df = rename_colnames_output(sra_df=sra_df)
