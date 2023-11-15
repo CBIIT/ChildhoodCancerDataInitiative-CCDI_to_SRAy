@@ -34,6 +34,12 @@ A controlled **virtual environment** of Python is always recommanded for running
     ```
 
     You should be able to see `(CCDI_to_SRA_env)` at the begining of your terminal prompt line after activation.
+  
+- **Deactivate the environment**
+
+    ```
+    conda deactivate
+    ```
 
 ### Usage instruction
 
