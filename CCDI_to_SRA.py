@@ -1,3 +1,9 @@
+"""
+This script is a tool in python that takes validated CCDI manifest
+and  SRA templates, and creates a  submission file for SRA.
+
+Authors: Qiong Liu <qiong.liu@nih.gov>
+"""
 import argparse
 from typing import List, TypeVar, Dict
 import warnings
@@ -357,19 +363,10 @@ def get_sra_terms_dict(terms_df: DataFrame) -> Dict:
         {
             "filetype": [
                 "bam",
-                "fastq",
-                "cram",
-                "sff",
-                "reference_fasta",
-                "OxfordNanopore_native",
-                "PacBio_HDF5",
-                "csv",
-                "tab",
                 "bai",
+                "cram",
                 "crai",
-                "vcf",
-                "bcf",
-                "vcf_index",
+                "fastq",
             ]
         }
     )
@@ -827,7 +824,8 @@ def check_and_remove_duplicates(sra_df: DataFrame, logger) -> None:
 
 def reorder_col_names(col_list: List) -> List:
     extended_file = [i for i in col_list if "." in i]
-    before_file_cols = [
+    extended_file_to_add = [k for k in extended_file if k not in ["filetype.1", "filename.1", "MD5_checksum.1"]]
+    original_cols = [
         "phs_accession",
         "sample_ID",
         "library_ID",
@@ -844,15 +842,16 @@ def reorder_col_names(col_list: List) -> List:
         "filetype",
         "filename",
         "MD5_checksum",
-    ]
-    after_file_cols = [
+        "filetype.1",
+        "filename.1",
+        "MD5_checksum.1",
         "active_location_URL",
         "Bases",
         "Reads",
         "coverage",
-        "AvgReadLength",
+        "AvgReadLength"
     ]
-    reordered_cols = before_file_cols + extended_file + after_file_cols
+    reordered_cols = original_cols + extended_file_to_add
     return reordered_cols
 
 
@@ -890,6 +889,12 @@ def rename_colnames_output(sra_df: DataFrame) -> DataFrame:
 
 
 def reformat_previous_sra(p_sra_df: DataFrame) -> DataFrame:
+    """Reformats the dataframe of SRA Sequence Data dataframe
+    
+    For lines with multiple files derived from same library, 
+    move the extended file info (filetype.1, filename.1, and MD5_checksum.1)
+    into a new single line
+    """
     sra_cols = p_sra_df.columns.tolist()
     additional_cols = [i for i in sra_cols if "." in i]
     extra_max = max([int(i[len(i) - 1]) for i in additional_cols])
