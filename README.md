@@ -25,8 +25,8 @@ A controlled **virtual environment** of Python is always recommanded for running
     ```
     conda env list
     ```
-- **Activate conda environment**
-
+- **Activate the environment**
+  
     All the dependecies that the script requires should be succesfully installed within this environment. To activate the environemnt, simply run
 
     ```
