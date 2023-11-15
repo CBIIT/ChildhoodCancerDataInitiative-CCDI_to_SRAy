@@ -25,8 +25,8 @@ A controlled **virtual environment** of Python is always recommanded for running
     ```
     conda env list
     ```
-- **Activate the environment**
-  
+- **Activate conda environment**
+
     All the dependecies that the script requires should be succesfully installed within this environment. To activate the environemnt, simply run
 
     ```
@@ -34,8 +34,8 @@ A controlled **virtual environment** of Python is always recommanded for running
     ```
 
     You should be able to see `(CCDI_to_SRA_env)` at the begining of your terminal prompt line after activation.
-  
-- **Deactivate the environment**
+
+- **Deactivate conda environment**
 
     ```
     conda deactivate
@@ -73,16 +73,16 @@ optional arguments:
 
     The script performs couple rounds of validation and verification against SRA tempaltes. Once an `Error` is captured, the error and additional info of errored rows will be documented in both terminal and the log file. Below is an example of error log
 
-    ```
-    15:37:17 - ERROR - Multiple sample_IDs were found associated with same library_ID:
-    ('plexus_wawled_7',)
-    15:37:17 - WARNING - 2 rows were removed due to the sample_ID and library_ID issue
-    15:37:17 - WARNING - Additional info:
-    ╒════════════════════╤═════════════════╕
-    │ sample_ID          │ library_ID      │
-    ╞════════════════════╪═════════════════╡
-    │ vinier_sideburns_4 │ plexus_wawled_7 │
-    ├────────────────────┼─────────────────┤
-    │ outran_horsies_3   │ plexus_wawled_7 │
-    ╘════════════════════╧═════════════════╛
-    ```
+```
+15:37:17 - ERROR - Multiple sample_IDs were found associated with same library_ID:
+('plexus_wawled_7',)
+15:37:17 - WARNING - 2 rows were removed due to the sample_ID and library_ID issue
+15:37:17 - WARNING - Additional info:
+╒════════════════════╤═════════════════╕
+│ sample_ID          │ library_ID      │
+╞════════════════════╪═════════════════╡
+│ vinier_sideburns_4 │ plexus_wawled_7 │
+├────────────────────┼─────────────────┤
+│ outran_horsies_3   │ plexus_wawled_7 │
+╘════════════════════╧═════════════════╛
+```
