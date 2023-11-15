@@ -11,29 +11,29 @@ A controlled **virtual environment** of Python is always recommanded for running
 
 - **Conda install**
 
-Conda is an open source package management system and environment management system that runs on Windows, macOs, and Lunix. [Here](https://docs.conda.io/projects/miniconda/en/latest/) is the site of installation instruction. Please pick the right package based on your operation system.
+    Conda is an open source package management system and environment management system that runs on Windows, macOs, and Lunix. [Here](https://docs.conda.io/projects/miniconda/en/latest/) is the site of installation instruction. Please pick the right package based on your operation system.
 
 - **Create a conda env**
 
-An environment yaml `conda_environment.yml` can be be found under folder `envs/`. To create the environment, simply run
+    An environment yaml `conda_environment.yml` can be be found under folder `envs/`. To create the environment, simply run
 
-```
-conda env create -f <path_to_env_yml>
-```
-You should be able to find an environment called `CCDI_to_SRA_env` when you run 
+    ```
+    conda env create -f <path_to_env_yml>
+    ```
+    You should be able to find an environment called `CCDI_to_SRA_env` when you run 
 
-```
-conda env list
-```
-- ** Activate conda environment
+    ```
+    conda env list
+    ```
+- ** Activate conda environment**
 
-All the dependecies that the script requires should be succesfully installed within this environment. To activate the environemnt, simply run
+    All the dependecies that the script requires should be succesfully installed within this environment. To activate the environemnt, simply run
 
-```
-conda activate CCDI_to_SRA_env
-```
+    ```
+    conda activate CCDI_to_SRA_env
+    ```
 
-You should be able to see `(CCDI_to_SRA_env)` at the begining of your terminal prompt line after activation.
+    You should be able to see `(CCDI_to_SRA_env)` at the begining of your terminal prompt line after activation.
 
 ### Usage instruction
 
@@ -56,7 +56,7 @@ optional arguments:
 
 - **Inputs**
 
-The script requires a validated `CCDI manifest` and an `SRA submission template`. The previous SRA submission file is optional.
+    The script requires a validated `CCDI manifest` and an `SRA submission template`. The previous SRA submission file is optional.
 
 - **Outputs**
 
@@ -65,7 +65,7 @@ The script requires a validated `CCDI manifest` and an `SRA submission template`
 
 - **Debug**
 
-The script performs couple rounds of validation and verification against SRA tempaltes. Once an `Error` is captured, the error and additional info of errored rows will be documented in both terminal and the log file. Below is an example of error log
+    The script performs couple rounds of validation and verification against SRA tempaltes. Once an `Error` is captured, the error and additional info of errored rows will be documented in both terminal and the log file. Below is an example of error log
 
 ```
 15:37:17 - ERROR - Multiple sample_IDs were found associated with same library_ID:
