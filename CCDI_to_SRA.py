@@ -536,21 +536,19 @@ def sra_value_verification(
     ]
     required_df = sra_df[required_fields]
     cols_missing_info = required_df.columns[required_df.isna().any()].tolist()
+    missing_info_index = []
     if len(cols_missing_info) > 0:
-        logger.error(
-            f"These required fields contain missing value: {*cols_missing_info,}"
-        )
         df_w_missing = required_df[required_df.isna().any(axis=1)]
-        logger.warning(
-            f"{df_w_missing.shape[0]} rows were removed due to missing value mentioned above"
+        logger.error(
+            f"{df_w_missing.shape[0]} rows were found with missing value in required fields of\n{*cols_missing_info,}"
         )
         logger.warning(
-            "Additional info: sample_ID and library_ID of removed rows\n"
+            "Additional info: sample_ID and library_ID of affected rows\n"
             + df_w_missing[["sample_ID", "library_ID"]].to_markdown(
                 tablefmt="fancy_grid", index=False
             )
         )
-        sra_df = sra_df[required_df.notna().all(axis=1)].reset_index(drop=True)
+        missing_info_index = df_w_missing.index.tolist()
     else:
         logger.info(f"All required fields are populated.")
 
@@ -741,8 +739,9 @@ def sra_value_verification(
         logger.info("Model verification PASSED")
 
     # Create a list of index of any row that contains an unknow value
-    unknown_index_list = (
-        unknown_library_strategy_index
+    index_to_remove_verification = (
+        missing_info_index
+        + unknown_library_strategy_index
         + unknown_library_source_index
         + unknown_library_selection_index
         + unknown_library_layout_index
@@ -750,17 +749,11 @@ def sra_value_verification(
         + unknown_file_type_index
         + unknown_model_index
     )
-    unknown_index_list_uniq = list(set(unknown_index_list))
-    if len(unknown_index_list_uniq) > 0:
-        logger.warning(
-            f"{len(unknown_index_list_uniq)} rows were removed due to unknown values found above"
-        )
-    else:
-        pass
 
-    sra_df = sra_df.drop(index=unknown_index_list_uniq).reset_index(drop=True)
+    index_to_remove_verification_uniq = list(set(index_to_remove_verification))
+    logger.info(f"Verifying values in the Sequence Data DataFrame Done.")
 
-    return sra_df
+    return index_to_remove_verification_uniq
 
 
 def spread_sra_df(sra_df: DataFrame) -> DataFrame:
@@ -824,7 +817,11 @@ def check_and_remove_duplicates(sra_df: DataFrame, logger) -> None:
 
 def reorder_col_names(col_list: List) -> List:
     extended_file = [i for i in col_list if "." in i]
-    extended_file_to_add = [k for k in extended_file if k not in ["filetype.1", "filename.1", "MD5_checksum.1"]]
+    extended_file_to_add = [
+        k
+        for k in extended_file
+        if k not in ["filetype.1", "filename.1", "MD5_checksum.1"]
+    ]
     original_cols = [
         "phs_accession",
         "sample_ID",
@@ -849,7 +846,7 @@ def reorder_col_names(col_list: List) -> List:
         "Bases",
         "Reads",
         "coverage",
-        "AvgReadLength"
+        "AvgReadLength",
     ]
     reordered_cols = original_cols + extended_file_to_add
     return reordered_cols
@@ -890,8 +887,8 @@ def rename_colnames_output(sra_df: DataFrame) -> DataFrame:
 
 def reformat_previous_sra(p_sra_df: DataFrame) -> DataFrame:
     """Reformats the dataframe of SRA Sequence Data dataframe
-    
-    For lines with multiple files derived from same library, 
+
+    For lines with multiple files derived from same library,
     move the extended file info (filetype.1, filename.1, and MD5_checksum.1)
     into a new single line
     """
@@ -928,6 +925,34 @@ def reformat_previous_sra(p_sra_df: DataFrame) -> DataFrame:
             ).reset_index(drop=True)
 
     return p_sra_df_nochange
+
+
+def validate_sample_library(sra_df: DataFrame, logger) -> List:
+    index_rows_to_remove = []
+    logger.info(
+        "Checking if any library_ID was found associated with multiple sample_IDs"
+    )
+    sample_library_size = (
+        sra_df.groupby(["library_ID", "sample_ID"]).size().groupby("library_ID").size()
+    )
+    if sample_library_size.max() > 1:
+        library_to_fix = sample_library_size[sample_library_size > 1].index.tolist()
+        rows_to_remove = sum(sra_df["library_ID"].isin(library_to_fix))
+        logger.error(
+            f"{rows_to_remove} rows were found with one to many issue between library_ID and sample_ID\nlibrary_IDs involved\n{*library_to_fix,}"
+        )
+        df_rows_to_remove = sra_df[["sample_ID", "library_ID"]][
+            sra_df["library_ID"].isin(library_to_fix)
+        ]
+        logger.warning(
+            "Additional info: sample_ID and library_ID of affected rows\n"
+            + df_rows_to_remove.to_markdown(tablefmt="fancy_grid", index=False)
+        )
+        # get index of rows to be removed
+        index_rows_to_remove = df_rows_to_remove.index.tolist()
+    else:
+        logger.info("sample_ID and library_ID checking PASSED ")
+    return index_rows_to_remove
 
 
 def main():
@@ -1066,41 +1091,26 @@ def main():
 
     # check sample_ID and library_ID is one to many relationship
     # Many library_ID can be derived from same sample_ID
-
-    logger.info(
-        "Checking if any library_ID was found associated with multiple sample_IDs"
-    )
-    sample_library_size = (
-        sra_df.groupby(["library_ID", "sample_ID"]).size().groupby("library_ID").size()
-    )
-    if sample_library_size.max() > 1:
-        library_to_fix = sample_library_size[sample_library_size > 1].index.tolist()
-        logger.error(
-            f"Multiple sample_IDs were found associated with same library_ID:\n{*library_to_fix,}"
-        )
-        rows_to_remove = sum(sra_df["library_ID"].isin(library_to_fix))
-        logger.warning(
-            f"{rows_to_remove} rows were removed due to the sample_ID and library_ID issue"
-        )
-        df_rows_to_remove = sra_df[["sample_ID", "library_ID"]][
-            sra_df["library_ID"].isin(library_to_fix)
-        ]
-        logger.warning(
-            "Additional info: sample_ID and library_ID of removed rows\n"
-            + df_rows_to_remove.to_markdown(tablefmt="fancy_grid", index=False)
-        )
-        # remove the row containing the library_ID mentioned above
-        sra_df = sra_df[~sra_df["library_ID"].isin(library_to_fix)].reset_index(
-            drop=True
-        )
-    else:
-        logger.info("sample_ID and library_ID checking PASSED ")
+    sample_library_issue_index = validate_sample_library(sra_df=sra_df, logger=logger)
 
     # verification against template and check if any required fields are empty
-    sra_df = sra_value_verification(
+    verification_issue_index = sra_value_verification(
         sra_df=sra_df, sra_terms_dict=sra_terms_dict, logger=logger
     )
-    logger.info(f"Verifying values in the Sequence Data DataFrame Done.")
+
+    # combine the index identified from sample_ID library_ID validation
+    # and value verification steps
+    rows_to_remove_index = list(
+        set(sample_library_issue_index + verification_issue_index)
+    )
+    # remove errored rows identified with smaple_ID issue, missing info,
+    # or invalid values
+    if len(rows_to_remove_index) > 0:
+        sra_df = sra_df.drop(index=rows_to_remove_index).reset_index(drop=True)
+        logger.warning(f"{len(rows_to_remove_index)} rows were removed due to the errors described above")
+    else:
+        pass
+
     # Check if there is any row left after verification.
     # abort the script if no row left
     if sra_df.shape[0] == 0:
