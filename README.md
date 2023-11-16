@@ -15,7 +15,7 @@ A controlled **virtual environment** of Python is always recommanded for running
 
 - **Create a conda env**
 
-    An environment yaml `conda_environment.yml` can be be found under folder `envs/`. To create the environment, simply run
+    An environment yaml `conda_environment.yml` can be be found under folder `envs/`. To create the environment, simply run below in your terminal
 
     ```
     conda env create -f <path_to_env_yml>
