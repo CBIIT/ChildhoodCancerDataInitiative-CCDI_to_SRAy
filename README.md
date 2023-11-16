@@ -6,7 +6,7 @@ This repo contains a python script which takes data from a validated CCDI submis
 - [Python environment management](#python-environment-management)
 - [Usage instruction](#usage-instruction)
 
----
+----
 
 ### Python environment management
 A controlled **virtual environment** of Python is always recommanded for running any python package/script due to dependency management purpose. There are many tools that you can use to create a virtual environment, such as `pyenv`, `virtualenv` or `conda`. An instruction is included here on how to create a `conda env` with all the dependencies installed.
