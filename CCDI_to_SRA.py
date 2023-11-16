@@ -144,11 +144,8 @@ def ccdi_manifest_to_dict(excel_file: ExcelFile) -> Dict:
         # test if the df is empty
         # test if all column names contain a '.', if yes, do not add it to dict
         item_df_names = item_df.columns
-        if not item_df.empty:
-            if len([j for j in item_df_names if "." in j]) != len(item_df_names):
-                ccdi_dict[key] = item_df
-            else:
-                pass
+        if len([j for j in item_df_names if "." in j]) != len(item_df_names):
+            ccdi_dict[key] = item_df
         else:
             pass
     del ccdi_dict_raw
@@ -563,7 +560,7 @@ def sra_value_verification(
     ].tolist()
     if len(unknown_library_strategy) > 0:
         logger.error(
-            f"The following library strategy values are not accepted: {*unknown_library_strategy,}"
+            f"The following library strategy values are not accepted: {*list(set(unknown_library_strategy)),}"
         )
         logger.warning(
             "Additional info:\n"
@@ -588,7 +585,7 @@ def sra_value_verification(
     ].tolist()
     if len(unknown_library_source) > 0:
         logger.error(
-            f"The following library source values are not accepted: {*unknown_library_source,}"
+            f"The following library source values are not accepted: {*list(set(unknown_library_source)),}"
         )
         logger.warning(
             "Additional info:\n"
@@ -617,7 +614,7 @@ def sra_value_verification(
     ].tolist()
     if len(unknown_library_selection) > 0:
         logger.error(
-            f"The following library selection values are not accepted: {*unknown_library_selection,}"
+            f"The following library selection values are not accepted: {*list(set(unknown_library_selection)),}"
         )
         logger.warning(
             "Additional info:\n"
@@ -645,7 +642,7 @@ def sra_value_verification(
     ].tolist()
     if len(unknown_library_layout) > 0:
         logger.error(
-            f"The following library layout values are not accepted: {*unknown_library_layout,}"
+            f"The following library layout values are not accepted: {*list(set(unknown_library_layout)),}"
         )
         logger.warning(
             "Additional info:\n"
@@ -663,13 +660,7 @@ def sra_value_verification(
     unknown_file_type = sra_df["filetype"][unknown_file_type_index].tolist()
     if len(unknown_file_type) > 0:
         logger.error(
-            f"The following file type values are not accepted: {*unknown_file_type,}"
-        )
-        logger.warning(
-            "Additional info:\n"
-            + sra_df.iloc[unknown_file_type_index][
-                ["sample_ID", "library_ID", "filetype"]
-            ].to_markdown(tablefmt="fancy_grid", index=False)
+            f"The following file type values are not accepted: {*list(set(unknown_file_type)),}"
         )
     else:
         logger.info("File type verification PASSED")
@@ -702,7 +693,7 @@ def sra_value_verification(
 
     if len(unknown_platform) > 0:
         logger.error(
-            f"The following platform values are not accepted: {*unknown_platform,}"
+            f"The following platform values are not accepted: {*list(set(unknown_platform)),}"
         )
         logger.warning(
             "Additional info:\n"
@@ -718,7 +709,7 @@ def sra_value_verification(
         logger.info("Platform verification PASSED")
     if len(unknown_model) > 0:
         logger.error(
-            f"The following model values are not accepted given the platform value: {*unknown_model,}"
+            f"The following model values are not accepted given the platform value: {*list(set([str(k)for k in unknown_model])),}"
         )
         logger.warning(
             "Additional info:\n"
@@ -1044,23 +1035,19 @@ def main():
     else:
         logger.warning("No previsous submission file was provided.")
 
+    # create a dictionary of contents sra_dict["Terms"]
+    sra_terms_dict = get_sra_terms_dict(sra_dict["Terms"])
+
     # If there is no seuqencing record in CCDI manifest, exit execution
-    if not (
-        "sequencing_file" in workbook_dict.keys()
-        or "single_cell_sequencing_file" in workbook_dict.keys()
-    ):
+    sequencing_file_df = workbook_dict["sequencing_file"]
+    single_sequencing_file_df = workbook_dict["single_cell_sequencing_file"]
+    if sequencing_file_df.empty and single_sequencing_file_df.empty:
         logger.info(
             "No seuqneincg file or single cell sequencing file found in CCDI submission file, and no SRA submission file will be generated"
         )
         sys.exit()
     else:
-        # create a sequencing df if "sequencing_file" exists in workbook_dict
-        sequencing_file_df = workbook_dict["sequencing_file"]
-        single_sequencing_file_df = workbook_dict["single_cell_sequencing_file"]
-        logger.info(f"Sequecing file records found in validated CCDI manifest")
-
-    # create a dictionary of contents sra_dict["Terms"]
-    sra_terms_dict = get_sra_terms_dict(sra_dict["Terms"])
+        pass
 
     # Combine records from sheets sequencing_file and single_cell_sequencing_file
     sequencing_df = concat_seq_single_seq(
@@ -1107,7 +1094,9 @@ def main():
     # or invalid values
     if len(rows_to_remove_index) > 0:
         sra_df = sra_df.drop(index=rows_to_remove_index).reset_index(drop=True)
-        logger.warning(f"{len(rows_to_remove_index)} rows were removed due to the errors described above")
+        logger.warning(
+            f"{len(rows_to_remove_index)} rows were removed due to the errors described above"
+        )
     else:
         pass
 
