@@ -410,8 +410,15 @@ def reformat_sra_values(sra_df: DataFrame) -> DataFrame:
         sra_df["library_layout"].str.contains("Single end", na=False)
     ] = "single"
     sra_df["library_layout"][
+        sra_df["library_layout"].str.contains("single-end", na=False)
+    ] = "single"
+    sra_df["library_layout"][
         sra_df["library_layout"].str.contains("Paired end", na=False)
     ] = "paired"
+    sra_df["library_layout"][
+        sra_df["library_layout"].str.contains("paired-end", na=False)
+    ] = "paired"
+    
 
     # fix library source value
     sra_df["library_source (click for details)"] = sra_df[
