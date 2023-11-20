@@ -290,7 +290,7 @@ def sra_match_manifest_seq(
     sra_seq_df["coverage"] = manifest_seq_df["coverage"]
     sra_seq_df["AvgReadLength"] = manifest_seq_df["avg_read_length"]
     sra_seq_df["active_location_URL"] = [
-        os.path.dirname(i) for i in manifest_seq_df["file_url_in_cds"].tolist()
+        os.path.dirname(i)+"/" for i in manifest_seq_df["file_url_in_cds"].tolist()
     ]
     return sra_seq_df
 
@@ -405,6 +405,17 @@ def reformat_sra_values(sra_df: DataFrame) -> DataFrame:
         sra_df["platform (click for details)"] == "Oxford Nanopore"
     ] = "OXFORD_NANOPORE"
 
+    # fix instrument value
+    sra_df["instrument_model"][
+        sra_df["instrument_model"] == "Illumina HiSeq X Ten"
+    ] = "HiSeq X Ten"
+    sra_df["instrument_model"][
+        sra_df["instrument_model"] == "Illumina HiSeq X Five"
+    ] = "HiSeq X Five"
+    sra_df["instrument_model"][
+        sra_df["instrument_model"] == "Illumina NovaSeq"
+    ] = "Illumina NovaSeq 6000"
+
     # fix library layout value
     sra_df["library_layout"][
         sra_df["library_layout"].str.contains("Single end", na=False)
@@ -418,7 +429,6 @@ def reformat_sra_values(sra_df: DataFrame) -> DataFrame:
     sra_df["library_layout"][
         sra_df["library_layout"].str.contains("paired-end", na=False)
     ] = "paired"
-    
 
     # fix library source value
     sra_df["library_source (click for details)"] = sra_df[
@@ -468,6 +478,10 @@ def reformat_sra_values(sra_df: DataFrame) -> DataFrame:
         sra_df["library_selection (click for details)"]
         == "Padlock Probes Capture Method"
     ] = "padlock probes capture method"
+    sra_df["library_selection (click for details)"][
+        sra_df["library_selection (click for details)"]
+        == "rRNA Depletion"
+    ] = "Inverse rRNA"
 
     # fix filetype value and convert all values to lower case
     sra_df["filetype"][sra_df["filetype"].str.contains("tbi", na=False)] = "vcf_index"
