@@ -290,7 +290,7 @@ def sra_match_manifest_seq(
     sra_seq_df["coverage"] = manifest_seq_df["coverage"]
     sra_seq_df["AvgReadLength"] = manifest_seq_df["avg_read_length"]
     sra_seq_df["active_location_URL"] = [
-        os.path.dirname(i)+"/" for i in manifest_seq_df["file_url_in_cds"].tolist()
+        os.path.dirname(i) + "/" for i in manifest_seq_df["file_url_in_cds"].tolist()
     ]
     return sra_seq_df
 
@@ -479,8 +479,7 @@ def reformat_sra_values(sra_df: DataFrame) -> DataFrame:
         == "Padlock Probes Capture Method"
     ] = "padlock probes capture method"
     sra_df["library_selection (click for details)"][
-        sra_df["library_selection (click for details)"]
-        == "rRNA Depletion"
+        sra_df["library_selection (click for details)"] == "rRNA Depletion"
     ] = "Inverse rRNA"
 
     # fix filetype value and convert all values to lower case
@@ -768,7 +767,51 @@ def sra_value_verification(
     return index_to_remove_verification_uniq
 
 
-def spread_sra_df(sra_df: DataFrame) -> DataFrame:
+def check_value_constancy(library_id: str, unit_df: DataFrame, logger) -> None:
+    """This function checks if certain values are same between files sharing
+    the same library_ID and report library_IDs if this issue is found
+    """
+    check_fields = [
+        "library_strategy (click for details)",
+        "library_source (click for details)",
+        "library_selection (click for details)",
+        "library_layout",
+        "platform (click for details)",
+        "instrument_model",
+        "design_description",
+        "reference_genome_assembly (or accession)",
+        "alignment_software",
+        "Bases",
+        "Reads",
+        "coverage",
+        "AvgReadLength",
+        "active_location_URL",
+    ]
+    cols_to_report = []
+    for i in check_fields:
+        i_uniq_list = unit_df[i].dropna().unique().tolist()
+        if len(i_uniq_list) == 0:
+            pass
+        elif len(i_uniq_list) > 1:
+            cols_to_report.append(i)
+        else:
+            pass
+    if len(cols_to_report) > 0:
+        logger.warning(
+            f"Files from library {library_id} have different values for {*cols_to_report,}"
+        )
+        logger.warning(
+            f"Additional info:\n"
+            + unit_df[["library_ID"] + cols_to_report].to_markdown(
+                tablefmt="fancy_grid",
+                index=False,
+            )
+        )
+    else:
+        pass
+
+
+def spread_sra_df(sra_df: DataFrame, logger) -> DataFrame:
     """Returns a spreaded dataframe if multiple files
     were found with same library ID
 
@@ -781,12 +824,16 @@ def spread_sra_df(sra_df: DataFrame) -> DataFrame:
     return_df = pd.DataFrame(columns=sra_df.columns.tolist())
     for i in uniq_library:
         # subset a df for that library_ID and reset index starting from 0
-        i_df = sra_df[sra_df["library_ID"] == i].reset_index(drop=True)
+        i_df = sra_df[sra_df["library_ID"] == i]
+        # reoder i_df based on filetype, prioritize bam and cram files
+        i_df = i_df.sort_values(by=["filetype"], ascending=False).reset_index(drop=True)
         # get the line of i_df
         i_df_row = i_df.shape[0]
         if i_df_row == 1:
             return_df = pd.concat([return_df, i_df], axis=0, ignore_index=True)
         else:
+            # check value constancy of i_df and report cols with issue
+            check_value_constancy(library_id=i, unit_df=i_df, logger=logger)
             i_df_firstrow = i_df.loc[[0], :]
             for j in range(1, i_df.shape[0]):
                 j_filename = "filename." + str(j)
@@ -796,6 +843,17 @@ def spread_sra_df(sra_df: DataFrame) -> DataFrame:
                 i_df_firstrow[j_filetype] = i_df.at[i_df.index[j], "filetype"]
                 i_df_firstrow[j_md5] = i_df.at[i_df.index[j], "MD5_checksum"]
             return_df = pd.concat([return_df, i_df_firstrow], axis=0, ignore_index=True)
+    # check missing values of the entire df
+    report_missing_library_id = return_df[return_df.isna().any(axis=1)][
+        "library_ID"
+    ].tolist()
+    if len(report_missing_library_id) > 0:
+        logger.warning(
+            f"These {len(report_missing_library_id)} library_IDs contains missing information in the final output and please address this issue accordingly:\n"
+            + f"{*report_missing_library_id,}"
+        )
+    else:
+        pass
     return return_df
 
 
@@ -1159,7 +1217,7 @@ def main():
     # data frame manipulation, spread sra_df if multiple sequencing files are
     # sharing same library_ID. This function won't result multiple row sharing
     # same libary_ID
-    sra_df = spread_sra_df(sra_df=sra_df)
+    sra_df = spread_sra_df(sra_df=sra_df, logger=logger)
     logger.info(
         "Sequencing files sharing the same library_ID will be reorganized into single row"
     )
