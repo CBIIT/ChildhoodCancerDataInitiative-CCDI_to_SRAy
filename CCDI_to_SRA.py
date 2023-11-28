@@ -1230,7 +1230,7 @@ def main():
 
     # create file for final output
     acl_name = sra_df["phs_accession"].tolist()[0]
-    sra_output_path = acl_name + "_" + get_date() + "_SRA_submission.xlsx"
+    sra_output_path = acl_name + "_SRA_submission.xlsx"
     copy(src=template, dst=sra_output_path)
     # write sra_df into Sequence_Data sheet of output
     logger.info(f"Writing output to path: {sra_output_path}")
