@@ -1079,8 +1079,8 @@ def main():
     except ValueError as err:
         logger.error(err)
         sys.exit()
-    except:
-        logger.error(f"Issue occurred while openning file {manifest}")
+    except BaseException as err:
+        logger.error(f"Issue occurred while openning file {manifest}: {err}")
         sys.exit()
 
     try:
@@ -1095,8 +1095,8 @@ def main():
     except ValueError as err:
         logger.error(err)
         sys.exit()
-    except:
-        logger.error(f"Issue occurred while openning file {template}")
+    except BaseException as err:
+        logger.error(f"Issue occurred while openning file {template}: {err}")
         sys.exit()
 
     # Read previous submission if the file was provided
@@ -1109,8 +1109,8 @@ def main():
             logger.error(err)
         except ValueError as err:
             logger.error(err)
-        except:
-            logger.error(f"Issue occurred while openning file {pre_sub}")
+        except BaseException as err:
+            logger.error(f"Issue occurred while openning file {pre_sub}: {err}")
     else:
         logger.warning("No previsous submission file was provided.")
 
