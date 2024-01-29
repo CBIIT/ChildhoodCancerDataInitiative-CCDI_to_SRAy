@@ -1,4 +1,4 @@
-# ChildhoodCancerDataInitiative-CCDI_to_SRAy
+# ChildhoodCancerDataInitiative-CCDI_to_SRAy (ARCHIVED)
 
 This repo contains a python script which takes data from a validated CCDI submission manifest and creates an SRA submission file specifically for a CCDI project.
 
